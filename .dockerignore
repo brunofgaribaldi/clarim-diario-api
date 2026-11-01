@@ -1,0 +1,27 @@
+# O .dockerignore funciona como o .gitignore, mas para o "contexto de build":
+# a pasta inteira que o Docker envia para o motor de build antes de ler o
+# Dockerfile. Tirar coisas daqui deixa o build mais rápido e, principalmente,
+# impede que segredos acabem DENTRO da imagem.
+
+# Segredos locais — NUNCA podem ir para a imagem.
+.env
+.env.*
+
+# Saída de build local: o Dockerfile compila do zero no estágio builder.
+target/
+
+# Git, IDEs e ferramentas: irrelevantes para rodar a API.
+.git
+.gitignore
+.gitattributes
+.idea
+.vscode
+.claude
+*.iml
+
+# Arquivos do próprio Docker não precisam estar no contexto.
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+HELP.md

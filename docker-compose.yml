@@ -1,0 +1,73 @@
+# =====================================================================
+# DOCKER COMPOSE — AMBIENTE LOCAL (API + POSTGRES)
+# =====================================================================
+# O Dockerfile descreve UMA imagem. O compose orquestra VÁRIOS containers
+# que precisam conversar: aqui, a API e o banco. Com um comando só:
+#
+#   docker compose up --build      → constrói a imagem e sobe tudo
+#   docker compose down            → derruba (os dados do banco ficam)
+#   docker compose down -v         → derruba E apaga os dados do banco
+#
+# Este arquivo é para testar NA SUA MÁQUINA exatamente o que vai rodar no
+# Railway. Em produção o Railway não usa este arquivo: lá, o banco é um
+# serviço gerenciado e a API é construída direto do Dockerfile.
+# =====================================================================
+
+# "services" = cada container que vamos rodar. O NOME do serviço vira o
+# hostname dele na rede interna que o compose cria — por isso a API
+# acessa o banco como "db", e não "localhost".
+services:
+
+  db:
+    # Imagem oficial do Postgres, mesma versão principal da sua máquina (17).
+    image: postgres:17-alpine
+    # Variáveis que a imagem do Postgres lê NO PRIMEIRO BOOT para criar o
+    # banco e o usuário. Depois que o volume existe, ela as ignora.
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Defina POSTGRES_DB no arquivo .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER no arquivo .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
+    # "porta_na_sua_máquina:porta_no_container". Usamos 5433 por fora
+    # porque o seu Postgres local já ocupa a 5432. Assim você pode abrir
+    # este banco no DBeaver/pgAdmin em localhost:5433 sem conflito.
+    ports:
+      - "5433:5432"
+    # Volume = disco que sobrevive ao container. Sem isso, cada
+    # `docker compose down` apagaria todos os dados do banco.
+    volumes:
+      - dados-postgres:/var/lib/postgresql/data
+    # Como o compose sabe que o Postgres está PRONTO (e não só "ligado")?
+    # Rodando pg_isready periodicamente. A API espera isso (ver depends_on).
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d clarim_diario"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    # "build: ." = construa a imagem a partir do Dockerfile desta pasta.
+    build: .
+    # Só sobe a API depois que o healthcheck do banco passar. Sem isso, a
+    # API poderia iniciar antes do Postgres aceitar conexões e cair no boot.
+    depends_on:
+      db:
+        condition: service_healthy
+    # Carrega os SEGREDOS (Stripe, JWT...) do arquivo .env desta pasta.
+    env_file:
+      - .env
+    # Variáveis específicas do ambiente Docker (sobrescrevem o .env).
+    # Note o host "db": o nome do serviço acima.
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/clarim_diario
+      DATABASE_USERNAME: ${DATABASE_USERNAME:?Defina DATABASE_USERNAME no arquivo .env}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Defina DATABASE_PASSWORD no arquivo .env}
+      PORT: 8080
+    # Expõe a API em http://localhost:8080 — o front local continua
+    # funcionando sem mudar nada. (Pare a API do IntelliJ antes, para não
+    # brigarem pela mesma porta.)
+    ports:
+      - "8080:8080"
+
+# Declara o volume nomeado usado pelo serviço db.
+volumes:
+  dados-postgres:
